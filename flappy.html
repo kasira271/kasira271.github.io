@@ -61,6 +61,34 @@
             width: 100%;
             pointer-events: none;
         }
+        .voice-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            border: 1px solid #38bdf8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .pulse {
+            width: 8px;
+            height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            animation: pulse-animation 1.5s infinite;
+        }
+        @keyframes pulse-animation {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
         .hidden { display: none !important; }
     </style>
 </head>
@@ -69,15 +97,21 @@
     <div id="ui-overlay">
         <div id="score-display" class="score-box">0</div>
         
-        <!-- SIMPLIFIED START SCREEN -->
+        <!-- START SCREEN -->
         <div id="start-screen" class="flex flex-col items-center">
             <h1 class="text-5xl font-black mb-4 text-sky-400">NEON FLAP</h1>
-            <div class="mb-6">
-                <!-- Using a standard img tag to show a preview on the start screen too -->
+            <div class="mb-4">
                 <img src="Screenshot_2026-03-23_141147-removebg-preview.png" alt="Chick" class="w-24 h-24 animate-bounce">
             </div>
-            <p class="text-slate-400 text-sm">Press Space or Tap to Jump</p>
+            <p class="text-slate-400 text-sm mb-2">Press Space or Tap to Jump</p>
+            <p class="text-sky-400 text-xs font-bold uppercase tracking-widest">Or Say "Up" / "Down"</p>
             <button class="btn" id="start-btn">START GAME</button>
+        </div>
+
+        <!-- VOICE TOGGLE -->
+        <div id="voice-toggle" class="voice-indicator" onclick="toggleVoiceControl()">
+            <div id="voice-pulse" class="hidden pulse"></div>
+            <span id="voice-status">Voice Control: OFF</span>
         </div>
 
         <div id="game-over-screen" class="hidden flex flex-col items-center">
@@ -98,6 +132,8 @@
         const gameOverScreen = document.getElementById('game-over-screen');
         const finalScoreTxt = document.getElementById('final-score');
         const highScoreTxt = document.getElementById('high-score');
+        const voiceStatus = document.getElementById('voice-status');
+        const voicePulse = document.getElementById('voice-pulse');
         
         // Character Image Setup
         let chickLoaded = false;
@@ -120,6 +156,7 @@
 
         const GRAVITY = 0.22;
         const JUMP_STRENGTH = -4.5;
+        const DIVE_STRENGTH = 4.0;
         const PIPE_SPEED = 1.8;
         const PIPE_SPAWN_RATE = 110;
         const PIPE_WIDTH = 45;
@@ -134,6 +171,60 @@
         let isGameOver = false;
         let isGameStarted = false;
         let animationId;
+        let isVoiceEnabled = false;
+
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                const last = event.results.length - 1;
+                const command = event.results[last][0].transcript.toLowerCase().trim();
+                
+                console.log('Voice Command:', command);
+                
+                if (command.includes('up')) {
+                    jump();
+                } else if (command.includes('down')) {
+                    dive();
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error', event.error);
+                if (isVoiceEnabled) {
+                    setTimeout(() => recognition.start(), 1000); // Attempt restart
+                }
+            };
+
+            recognition.onend = () => {
+                if (isVoiceEnabled) recognition.start(); // Keep listening
+            };
+        }
+
+        function toggleVoiceControl() {
+            if (!recognition) {
+                alert("Speech recognition not supported in this browser.");
+                return;
+            }
+
+            isVoiceEnabled = !isVoiceEnabled;
+            if (isVoiceEnabled) {
+                recognition.start();
+                voiceStatus.innerText = "Voice Control: ON (Say Up/Down)";
+                voicePulse.classList.remove('hidden');
+            } else {
+                recognition.stop();
+                voiceStatus.innerText = "Voice Control: OFF";
+                voicePulse.classList.add('hidden');
+            }
+        }
 
         function resizeCanvas() {
             canvas.width = Math.min(window.innerWidth, 450);
@@ -157,6 +248,12 @@
             } else if (!isGameOver) {
                 bird.velocity = JUMP_STRENGTH;
                 playSound(sfxJump);
+            }
+        }
+
+        function dive() {
+            if (isGameStarted && !isGameOver) {
+                bird.velocity = DIVE_STRENGTH;
             }
         }
 
@@ -202,7 +299,6 @@
                 let p = pipes[i];
                 p.x -= PIPE_SPEED;
                 
-                // Tight collision box for the chick
                 const birdHitboxWidth = bird.radius * 1.5;
                 const birdHitboxHeight = bird.radius * 1.5;
 
@@ -230,11 +326,9 @@
             ctx.save();
             ctx.translate(bird.x, bird.y);
             
-            // Subtle rotation based on velocity
             let rotation = isGameStarted ? Math.min(Math.PI / 8, Math.max(-Math.PI / 8, bird.velocity * 0.08)) : 0;
             ctx.rotate(rotation);
             
-            // Draw Chick Sprite
             const drawSize = bird.radius * 3.5;
             ctx.drawImage(chickImg, -drawSize/2, -drawSize/2, drawSize, drawSize);
             
@@ -244,17 +338,12 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Draw Pipes
             pipes.forEach(p => {
                 ctx.fillStyle = '#38bdf8';
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = '#0ea5e9';
-                
-                // Top Pipe
                 roundRect(ctx, p.x, 0, PIPE_WIDTH, p.top, 6);
-                // Bottom Pipe
                 roundRect(ctx, p.x, p.top + GAP_HEIGHT, PIPE_WIDTH, canvas.height - (p.top + GAP_HEIGHT), 6);
-                
                 ctx.shadowBlur = 0;
             });
             
@@ -282,11 +371,16 @@
             if (!isGameOver) animationId = requestAnimationFrame(gameLoop);
         }
 
-        // Control listeners
-        window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); jump(); } });
+        window.addEventListener('keydown', (e) => { 
+            if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jump(); }
+            if (e.code === 'ArrowDown') { e.preventDefault(); dive(); }
+        });
         canvas.addEventListener('mousedown', (e) => { e.preventDefault(); jump(); });
         canvas.addEventListener('touchstart', (e) => { 
-            if (e.target.tagName !== 'BUTTON') { e.preventDefault(); jump(); }
+            if (e.target.tagName !== 'BUTTON' && e.target.id !== 'voice-toggle') { 
+                e.preventDefault(); 
+                jump(); 
+            }
         }, { passive: false });
 
         document.getElementById('start-btn').onclick = startGame;
