@@ -51,20 +51,6 @@
             transform: scale(0.95);
             background: #0ea5e9;
         }
-        .selector-btn {
-            pointer-events: auto;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        .selector-btn:hover { background: rgba(255, 255, 255, 0.2); }
         
         .score-box {
             position: absolute;
@@ -83,28 +69,13 @@
     <div id="ui-overlay">
         <div id="score-display" class="score-box">0</div>
         
-        <!-- START SCREEN WITH DRESS UP -->
+        <!-- SIMPLIFIED START SCREEN -->
         <div id="start-screen" class="flex flex-col items-center">
             <h1 class="text-5xl font-black mb-4 text-sky-400">NEON FLAP</h1>
-            
-            <div class="bg-slate-800/80 p-6 rounded-2xl border border-slate-700 shadow-xl mb-4 w-64 pointer-events-auto">
-                <p class="text-xs uppercase tracking-widest text-slate-400 mb-4 font-bold">Customize Bird</p>
-                
-                <!-- Color Selector -->
-                <div class="flex items-center justify-between mb-4">
-                    <button class="selector-btn" onclick="changeColor(-1)">←</button>
-                    <span id="color-name" class="font-medium">Yellow</span>
-                    <button class="selector-btn" onclick="changeColor(1)">→</button>
-                </div>
-
-                <!-- Accessory Selector -->
-                <div class="flex items-center justify-between">
-                    <button class="selector-btn" onclick="changeAccessory(-1)">←</button>
-                    <span id="accessory-name" class="font-medium text-sky-300">None</span>
-                    <button class="selector-btn" onclick="changeAccessory(1)">→</button>
-                </div>
+            <div class="mb-6">
+                <!-- Using a standard img tag to show a preview on the start screen too -->
+                <img src="Screenshot_2026-03-23_141147-removebg-preview.png" alt="Chick" class="w-24 h-24 animate-bounce">
             </div>
-
             <p class="text-slate-400 text-sm">Press Space or Tap to Jump</p>
             <button class="btn" id="start-btn">START GAME</button>
         </div>
@@ -128,6 +99,15 @@
         const finalScoreTxt = document.getElementById('final-score');
         const highScoreTxt = document.getElementById('high-score');
         
+        // Character Image Setup
+        let chickLoaded = false;
+        const chickImg = new Image();
+        chickImg.onload = () => {
+            chickLoaded = true;
+            draw();
+        };
+        chickImg.src = 'Screenshot_2026-03-23_141147-removebg-preview.png';
+
         // Audio Setup
         const sfxJump = new Audio('squawk.mp3');
         const sfxScore = new Audio('combo.mp3');
@@ -135,7 +115,7 @@
 
         function playSound(audio) {
             audio.currentTime = 0;
-            audio.play().catch(e => console.log("Audio play prevented by browser policy until interaction."));
+            audio.play().catch(e => {});
         }
 
         const GRAVITY = 0.22;
@@ -145,20 +125,8 @@
         const PIPE_WIDTH = 45;
         const GAP_HEIGHT = 180;
 
-        // Customization Options
-        const COLORS = [
-            { name: "Yellow", main: "#facc15", wing: "#eab308" },
-            { name: "Blue", main: "#38bdf8", wing: "#0ea5e9" },
-            { name: "Pink", main: "#f472b6", wing: "#db2777" },
-            { name: "Green", main: "#4ade80", wing: "#16a34a" }
-        ];
-        const ACCESSORIES = ["None", "Top Hat", "Bow", "Glasses"];
-        
-        let colorIdx = 0;
-        let accessoryIdx = 0;
-
         // Game State
-        let bird = { x: 50, y: 0, velocity: 0, radius: 15 };
+        let bird = { x: 50, y: 0, velocity: 0, radius: 22 }; 
         let pipes = [];
         let score = 0;
         let highscore = localStorage.getItem('neon-flap-best') || 0;
@@ -166,18 +134,6 @@
         let isGameOver = false;
         let isGameStarted = false;
         let animationId;
-
-        function changeColor(dir) {
-            colorIdx = (colorIdx + dir + COLORS.length) % COLORS.length;
-            document.getElementById('color-name').innerText = COLORS[colorIdx].name;
-            draw();
-        }
-
-        function changeAccessory(dir) {
-            accessoryIdx = (accessoryIdx + dir + ACCESSORIES.length) % ACCESSORIES.length;
-            document.getElementById('accessory-name').innerText = ACCESSORIES[accessoryIdx];
-            draw();
-        }
 
         function resizeCanvas() {
             canvas.width = Math.min(window.innerWidth, 450);
@@ -246,8 +202,12 @@
                 let p = pipes[i];
                 p.x -= PIPE_SPEED;
                 
-                if (bird.x + bird.radius - 4 > p.x && bird.x - bird.radius + 4 < p.x + PIPE_WIDTH) {
-                    if (bird.y - bird.radius + 4 < p.top || bird.y + bird.radius - 4 > p.top + GAP_HEIGHT) {
+                // Tight collision box for the chick
+                const birdHitboxWidth = bird.radius * 1.5;
+                const birdHitboxHeight = bird.radius * 1.5;
+
+                if (bird.x + birdHitboxWidth/2 > p.x && bird.x - birdHitboxWidth/2 < p.x + PIPE_WIDTH) {
+                    if (bird.y - birdHitboxHeight/2 < p.top || bird.y + birdHitboxHeight/2 > p.top + GAP_HEIGHT) {
                         triggerGameOver();
                     }
                 }
@@ -265,98 +225,39 @@
         }
 
         function drawBird() {
-            const theme = COLORS[colorIdx];
-            const acc = ACCESSORIES[accessoryIdx];
+            if (!chickLoaded) return;
             
             ctx.save();
             ctx.translate(bird.x, bird.y);
-            let rotation = isGameStarted ? Math.min(Math.PI / 4, Math.max(-Math.PI / 4, bird.velocity * 0.12)) : 0;
+            
+            // Subtle rotation based on velocity
+            let rotation = isGameStarted ? Math.min(Math.PI / 8, Math.max(-Math.PI / 8, bird.velocity * 0.08)) : 0;
             ctx.rotate(rotation);
             
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = theme.main;
-            
-            // Tuft
-            ctx.fillStyle = theme.main;
-            ctx.beginPath();
-            ctx.arc(-2, -bird.radius + 2, 6, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Body
-            ctx.beginPath();
-            ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Beak
-            ctx.fillStyle = '#f97316';
-            ctx.beginPath();
-            ctx.moveTo(bird.radius - 2, -2);
-            ctx.lineTo(bird.radius + 8, 2);
-            ctx.lineTo(bird.radius - 2, 6);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Wing
-            ctx.fillStyle = theme.wing;
-            ctx.beginPath();
-            let wingY = 2 + (isGameStarted ? Math.sin(frameCount * 0.2) * 2 : 0);
-            ctx.ellipse(-6, wingY, 10, 7, rotation * 0.5, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Eyes
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(6, -4, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'black';
-            ctx.beginPath();
-            ctx.arc(8, -4, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Accessories
-            ctx.shadowBlur = 0;
-            if (acc === "Top Hat") {
-                ctx.fillStyle = "#334155";
-                ctx.fillRect(-12, -bird.radius - 4, 24, 4); 
-                ctx.fillRect(-8, -bird.radius - 18, 16, 14); 
-                ctx.fillStyle = "#ef4444";
-                ctx.fillRect(-8, -bird.radius - 8, 16, 2); 
-            } else if (acc === "Bow") {
-                ctx.fillStyle = "#fb7185";
-                ctx.beginPath();
-                ctx.moveTo(-10, -bird.radius);
-                ctx.lineTo(-18, -bird.radius - 6);
-                ctx.lineTo(-18, -bird.radius + 6);
-                ctx.closePath(); ctx.fill();
-                ctx.beginPath();
-                ctx.moveTo(-10, -bird.radius);
-                ctx.lineTo(-2, -bird.radius - 6);
-                ctx.lineTo(-2, -bird.radius + 6);
-                ctx.closePath(); ctx.fill();
-                ctx.beginPath();
-                ctx.arc(-10, -bird.radius, 3, 0, Math.PI * 2);
-                ctx.fill();
-            } else if (acc === "Glasses") {
-                ctx.strokeStyle = "white";
-                ctx.lineWidth = 2;
-                ctx.strokeRect(2, -8, 8, 8);
-                ctx.strokeRect(10, -8, 8, 8);
-                ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(2, -4); ctx.stroke();
-            }
+            // Draw Chick Sprite
+            const drawSize = bird.radius * 3.5;
+            ctx.drawImage(chickImg, -drawSize/2, -drawSize/2, drawSize, drawSize);
             
             ctx.restore();
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Pipes
             pipes.forEach(p => {
-                ctx.fillStyle = '#0ea5e9';
-                ctx.shadowBlur = 10;
+                ctx.fillStyle = '#38bdf8';
+                ctx.shadowBlur = 15;
                 ctx.shadowColor = '#0ea5e9';
-                roundRect(ctx, p.x, 0, PIPE_WIDTH, p.top, 4);
-                roundRect(ctx, p.x, p.top + GAP_HEIGHT, PIPE_WIDTH, canvas.height - (p.top + GAP_HEIGHT), 4);
+                
+                // Top Pipe
+                roundRect(ctx, p.x, 0, PIPE_WIDTH, p.top, 6);
+                // Bottom Pipe
+                roundRect(ctx, p.x, p.top + GAP_HEIGHT, PIPE_WIDTH, canvas.height - (p.top + GAP_HEIGHT), 6);
+                
                 ctx.shadowBlur = 0;
             });
+            
             drawBird();
         }
 
@@ -371,7 +272,8 @@
             ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
             ctx.lineTo(x, y + radius);
             ctx.quadraticCurveTo(x, y, x + radius, y);
-            ctx.closePath(); ctx.fill();
+            ctx.closePath(); 
+            ctx.fill();
         }
 
         function gameLoop() {
@@ -380,6 +282,7 @@
             if (!isGameOver) animationId = requestAnimationFrame(gameLoop);
         }
 
+        // Control listeners
         window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); jump(); } });
         canvas.addEventListener('mousedown', (e) => { e.preventDefault(); jump(); });
         canvas.addEventListener('touchstart', (e) => { 
@@ -389,8 +292,6 @@
         document.getElementById('start-btn').onclick = startGame;
         document.getElementById('restart-btn').onclick = startGame;
         
-        window.changeColor = changeColor;
-        window.changeAccessory = changeAccessory;
         draw();
     </script>
 </body>
