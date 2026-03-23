@@ -269,11 +269,18 @@
             let averageVolume = sum / dataArray.length;
             let pitchIndex = sum > 0 ? weightedSum / sum : 0;
             volLevel.style.width = Math.min(100, averageVolume) + "%";
+            
             if (averageVolume > VOLUME_THRESHOLD) {
                 const now = Date.now();
                 if (now - lastActionTime > COOLDOWN) {
-                    if (pitchIndex > 22) jump();
-                    else if (pitchIndex < 18) dive();
+                    // Logic fix: PitchIndex represents relative frequency.
+                    // Lower PitchIndex (< 18) = Lower sound (Down command) -> Dive
+                    // Higher PitchIndex (> 22) = Higher sound (Up command) -> Jump
+                    if (pitchIndex > 22) {
+                        jump();
+                    } else if (pitchIndex < 18) {
+                        dive();
+                    }
                     lastActionTime = now;
                 }
             }
