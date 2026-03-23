@@ -128,6 +128,16 @@
         const finalScoreTxt = document.getElementById('final-score');
         const highScoreTxt = document.getElementById('high-score');
         
+        // Audio Setup
+        const sfxJump = new Audio('squawk.mp3');
+        const sfxScore = new Audio('combo.mp3');
+        const sfxHit = new Audio('punch.mp3');
+
+        function playSound(audio) {
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log("Audio play prevented by browser policy until interaction."));
+        }
+
         const GRAVITY = 0.22;
         const JUMP_STRENGTH = -4.5;
         const PIPE_SPEED = 1.8;
@@ -160,13 +170,13 @@
         function changeColor(dir) {
             colorIdx = (colorIdx + dir + COLORS.length) % COLORS.length;
             document.getElementById('color-name').innerText = COLORS[colorIdx].name;
-            draw(); // Refresh preview
+            draw();
         }
 
         function changeAccessory(dir) {
             accessoryIdx = (accessoryIdx + dir + ACCESSORIES.length) % ACCESSORIES.length;
             document.getElementById('accessory-name').innerText = ACCESSORIES[accessoryIdx];
-            draw(); // Refresh preview
+            draw();
         }
 
         function resizeCanvas() {
@@ -186,8 +196,12 @@
         }
 
         function jump() {
-            if (!isGameStarted) startGame();
-            else if (!isGameOver) bird.velocity = JUMP_STRENGTH;
+            if (!isGameStarted) {
+                startGame();
+            } else if (!isGameOver) {
+                bird.velocity = JUMP_STRENGTH;
+                playSound(sfxJump);
+            }
         }
 
         function startGame() {
@@ -206,7 +220,10 @@
         }
 
         function triggerGameOver() {
+            if (isGameOver) return;
             isGameOver = true;
+            playSound(sfxHit);
+            
             if (score > highscore) {
                 highscore = score;
                 localStorage.setItem('neon-flap-best', highscore);
@@ -220,18 +237,28 @@
             if (isGameOver) return;
             bird.velocity += GRAVITY;
             bird.y += bird.velocity;
+            
             if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) triggerGameOver();
+            
             if (frameCount % PIPE_SPAWN_RATE === 0) createPipe();
+            
             for (let i = pipes.length - 1; i >= 0; i--) {
                 let p = pipes[i];
                 p.x -= PIPE_SPEED;
+                
                 if (bird.x + bird.radius - 4 > p.x && bird.x - bird.radius + 4 < p.x + PIPE_WIDTH) {
-                    if (bird.y - bird.radius + 4 < p.top || bird.y + bird.radius - 4 > p.top + GAP_HEIGHT) triggerGameOver();
+                    if (bird.y - bird.radius + 4 < p.top || bird.y + bird.radius - 4 > p.top + GAP_HEIGHT) {
+                        triggerGameOver();
+                    }
                 }
+                
                 if (!p.passed && bird.x > p.x + PIPE_WIDTH) {
-                    score++; p.passed = true;
+                    score++;
+                    p.passed = true;
                     scoreDisplay.innerText = score;
+                    playSound(sfxScore);
                 }
+                
                 if (p.x + PIPE_WIDTH < 0) pipes.splice(i, 1);
             }
             frameCount++;
@@ -249,18 +276,18 @@
             ctx.shadowBlur = 15;
             ctx.shadowColor = theme.main;
             
-            // 1. Tuft
+            // Tuft
             ctx.fillStyle = theme.main;
             ctx.beginPath();
             ctx.arc(-2, -bird.radius + 2, 6, 0, Math.PI * 2);
             ctx.fill();
 
-            // 2. Body
+            // Body
             ctx.beginPath();
             ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
             ctx.fill();
 
-            // 3. Beak
+            // Beak
             ctx.fillStyle = '#f97316';
             ctx.beginPath();
             ctx.moveTo(bird.radius - 2, -2);
@@ -269,14 +296,14 @@
             ctx.closePath();
             ctx.fill();
             
-            // 4. Wing
+            // Wing
             ctx.fillStyle = theme.wing;
             ctx.beginPath();
             let wingY = 2 + (isGameStarted ? Math.sin(frameCount * 0.2) * 2 : 0);
             ctx.ellipse(-6, wingY, 10, 7, rotation * 0.5, 0, Math.PI * 2);
             ctx.fill();
 
-            // 5. Eyes
+            // Eyes
             ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.arc(6, -4, 5, 0, Math.PI * 2);
@@ -286,28 +313,26 @@
             ctx.arc(8, -4, 2.5, 0, Math.PI * 2);
             ctx.fill();
 
-            // 6. Accessories
+            // Accessories
             ctx.shadowBlur = 0;
             if (acc === "Top Hat") {
                 ctx.fillStyle = "#334155";
-                ctx.fillRect(-12, -bird.radius - 4, 24, 4); // Brim
-                ctx.fillRect(-8, -bird.radius - 18, 16, 14); // Hat body
+                ctx.fillRect(-12, -bird.radius - 4, 24, 4); 
+                ctx.fillRect(-8, -bird.radius - 18, 16, 14); 
                 ctx.fillStyle = "#ef4444";
-                ctx.fillRect(-8, -bird.radius - 8, 16, 2); // Ribbon
+                ctx.fillRect(-8, -bird.radius - 8, 16, 2); 
             } else if (acc === "Bow") {
                 ctx.fillStyle = "#fb7185";
                 ctx.beginPath();
                 ctx.moveTo(-10, -bird.radius);
                 ctx.lineTo(-18, -bird.radius - 6);
                 ctx.lineTo(-18, -bird.radius + 6);
-                ctx.closePath();
-                ctx.fill();
+                ctx.closePath(); ctx.fill();
                 ctx.beginPath();
                 ctx.moveTo(-10, -bird.radius);
                 ctx.lineTo(-2, -bird.radius - 6);
                 ctx.lineTo(-2, -bird.radius + 6);
-                ctx.closePath();
-                ctx.fill();
+                ctx.closePath(); ctx.fill();
                 ctx.beginPath();
                 ctx.arc(-10, -bird.radius, 3, 0, Math.PI * 2);
                 ctx.fill();
@@ -364,7 +389,6 @@
         document.getElementById('start-btn').onclick = startGame;
         document.getElementById('restart-btn').onclick = startGame;
         
-        // Initial setup
         window.changeColor = changeColor;
         window.changeAccessory = changeAccessory;
         draw();
