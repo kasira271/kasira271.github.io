@@ -90,6 +90,15 @@
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
         }
         .hidden { display: none !important; }
+
+        .training-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 15px;
+            pointer-events: auto;
+        }
     </style>
 </head>
 <body>
@@ -105,6 +114,16 @@
             </div>
             <p class="text-slate-400 text-sm mb-2">Press Space or Tap to Jump</p>
             <p class="text-sky-400 text-xs font-bold uppercase tracking-widest">Or Say "Up" / "Down"</p>
+            
+            <!-- Voice Example Training Box -->
+            <div class="training-box">
+                <p class="text-[10px] text-slate-500 uppercase mb-2">Voice Training</p>
+                <button onclick="playVoiceExample()" class="flex items-center gap-2 text-xs text-white bg-slate-700 px-3 py-1.5 rounded-full hover:bg-slate-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+                    Listen to "Up" Example
+                </button>
+            </div>
+
             <button class="btn" id="start-btn">START GAME</button>
         </div>
 
@@ -148,10 +167,15 @@
         const sfxJump = new Audio('squawk.mp3');
         const sfxScore = new Audio('combo.mp3');
         const sfxHit = new Audio('punch.mp3');
+        const sfxExample = new Audio('voice_115381.aac');
 
         function playSound(audio) {
             audio.currentTime = 0;
             audio.play().catch(e => {});
+        }
+
+        function playVoiceExample() {
+            playSound(sfxExample);
         }
 
         const GRAVITY = 0.22;
@@ -180,31 +204,42 @@
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = false;
+            recognition.interimResults = true; // Use interim for faster response
             recognition.lang = 'en-US';
 
             recognition.onresult = (event) => {
-                const last = event.results.length - 1;
-                const command = event.results[last][0].transcript.toLowerCase().trim();
-                
-                console.log('Voice Command:', command);
-                
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const transcript = event.results[i][0].transcript.toLowerCase().trim();
+                    if (event.results[i].isFinal) {
+                        handleCommand(transcript);
+                    } else {
+                        // Quick check on interim results for "up" to reduce lag
+                        if (transcript === 'up' || transcript.endsWith(' up')) {
+                            jump();
+                        }
+                    }
+                }
+            };
+
+            function handleCommand(command) {
+                console.log('Final Command:', command);
                 if (command.includes('up')) {
                     jump();
                 } else if (command.includes('down')) {
                     dive();
                 }
-            };
+            }
 
             recognition.onerror = (event) => {
                 console.error('Speech recognition error', event.error);
-                if (isVoiceEnabled) {
-                    setTimeout(() => recognition.start(), 1000); // Attempt restart
+                if (isVoiceEnabled && event.error !== 'not-allowed') {
+                    setTimeout(() => { if(isVoiceEnabled) recognition.start(); }, 1000);
                 }
             };
 
             recognition.onend = () => {
-                if (isVoiceEnabled) recognition.start(); // Keep listening
+                if (isVoiceEnabled) recognition.start();
             };
         }
 
@@ -371,6 +406,7 @@
             if (!isGameOver) animationId = requestAnimationFrame(gameLoop);
         }
 
+        // Control listeners
         window.addEventListener('keydown', (e) => { 
             if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jump(); }
             if (e.code === 'ArrowDown') { e.preventDefault(); dive(); }
@@ -386,6 +422,9 @@
         document.getElementById('start-btn').onclick = startGame;
         document.getElementById('restart-btn').onclick = startGame;
         
+        window.playVoiceExample = playVoiceExample;
+        window.toggleVoiceControl = toggleVoiceControl;
+
         draw();
     </script>
 </body>
