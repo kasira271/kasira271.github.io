@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Flap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #1e293b, #0f172a);
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            color: white;
+            text-align: center;
+        }
+        .btn {
+            pointer-events: auto;
+            background: #38bdf8;
+            color: #0f172a;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            border: none;
+            margin-top: 20px;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            background: #0ea5e9;
+        }
+        .selector-btn {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .selector-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        
+        .score-box {
+            position: absolute;
+            top: 20px;
+            font-size: 2.5rem;
+            font-weight: 800;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+            width: 100%;
+            pointer-events: none;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-overlay">
+        <div id="score-display" class="score-box">0</div>
+        
+        <!-- START SCREEN WITH DRESS UP -->
+        <div id="start-screen" class="flex flex-col items-center">
+            <h1 class="text-5xl font-black mb-4 text-sky-400">NEON FLAP</h1>
+            
+            <div class="bg-slate-800/80 p-6 rounded-2xl border border-slate-700 shadow-xl mb-4 w-64 pointer-events-auto">
+                <p class="text-xs uppercase tracking-widest text-slate-400 mb-4 font-bold">Customize Bird</p>
+                
+                <!-- Color Selector -->
+                <div class="flex items-center justify-between mb-4">
+                    <button class="selector-btn" onclick="changeColor(-1)">←</button>
+                    <span id="color-name" class="font-medium">Yellow</span>
+                    <button class="selector-btn" onclick="changeColor(1)">→</button>
+                </div>
+
+                <!-- Accessory Selector -->
+                <div class="flex items-center justify-between">
+                    <button class="selector-btn" onclick="changeAccessory(-1)">←</button>
+                    <span id="accessory-name" class="font-medium text-sky-300">None</span>
+                    <button class="selector-btn" onclick="changeAccessory(1)">→</button>
+                </div>
+            </div>
+
+            <p class="text-slate-400 text-sm">Press Space or Tap to Jump</p>
+            <button class="btn" id="start-btn">START GAME</button>
+        </div>
+
+        <div id="game-over-screen" class="hidden flex flex-col items-center">
+            <h2 class="text-4xl font-black mb-2 text-rose-500">GAME OVER</h2>
+            <p id="final-score" class="text-2xl mb-1">Score: 0</p>
+            <p id="high-score" class="text-slate-400 mb-4">Best: 0</p>
+            <button class="btn" id="restart-btn">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreTxt = document.getElementById('final-score');
+        const highScoreTxt = document.getElementById('high-score');
+        
+        const GRAVITY = 0.22;
+        const JUMP_STRENGTH = -4.5;
+        const PIPE_SPEED = 1.8;
+        const PIPE_SPAWN_RATE = 110;
+        const PIPE_WIDTH = 45;
+        const GAP_HEIGHT = 180;
+
+        // Customization Options
+        const COLORS = [
+            { name: "Yellow", main: "#facc15", wing: "#eab308" },
+            { name: "Blue", main: "#38bdf8", wing: "#0ea5e9" },
+            { name: "Pink", main: "#f472b6", wing: "#db2777" },
+            { name: "Green", main: "#4ade80", wing: "#16a34a" }
+        ];
+        const ACCESSORIES = ["None", "Top Hat", "Bow", "Glasses"];
+        
+        let colorIdx = 0;
+        let accessoryIdx = 0;
+
+        // Game State
+        let bird = { x: 50, y: 0, velocity: 0, radius: 15 };
+        let pipes = [];
+        let score = 0;
+        let highscore = localStorage.getItem('neon-flap-best') || 0;
+        let frameCount = 0;
+        let isGameOver = false;
+        let isGameStarted = false;
+        let animationId;
+
+        function changeColor(dir) {
+            colorIdx = (colorIdx + dir + COLORS.length) % COLORS.length;
+            document.getElementById('color-name').innerText = COLORS[colorIdx].name;
+            draw(); // Refresh preview
+        }
+
+        function changeAccessory(dir) {
+            accessoryIdx = (accessoryIdx + dir + ACCESSORIES.length) % ACCESSORIES.length;
+            document.getElementById('accessory-name').innerText = ACCESSORIES[accessoryIdx];
+            draw(); // Refresh preview
+        }
+
+        function resizeCanvas() {
+            canvas.width = Math.min(window.innerWidth, 450);
+            canvas.height = window.innerHeight;
+            bird.x = canvas.width / 4;
+            if (!isGameStarted) bird.y = canvas.height / 2;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function createPipe() {
+            const minHeight = 60;
+            const range = canvas.height - GAP_HEIGHT - (minHeight * 2);
+            pipes.push({ x: canvas.width, top: minHeight + Math.random() * range, passed: false });
+        }
+
+        function jump() {
+            if (!isGameStarted) startGame();
+            else if (!isGameOver) bird.velocity = JUMP_STRENGTH;
+        }
+
+        function startGame() {
+            isGameStarted = true;
+            isGameOver = false;
+            score = 0;
+            pipes = [];
+            frameCount = 0;
+            bird.y = canvas.height / 2;
+            bird.velocity = 0;
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            scoreDisplay.innerText = "0";
+            if (animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function triggerGameOver() {
+            isGameOver = true;
+            if (score > highscore) {
+                highscore = score;
+                localStorage.setItem('neon-flap-best', highscore);
+            }
+            finalScoreTxt.innerText = `Score: ${score}`;
+            highScoreTxt.innerText = `Best: ${highscore}`;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function update() {
+            if (isGameOver) return;
+            bird.velocity += GRAVITY;
+            bird.y += bird.velocity;
+            if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) triggerGameOver();
+            if (frameCount % PIPE_SPAWN_RATE === 0) createPipe();
+            for (let i = pipes.length - 1; i >= 0; i--) {
+                let p = pipes[i];
+                p.x -= PIPE_SPEED;
+                if (bird.x + bird.radius - 4 > p.x && bird.x - bird.radius + 4 < p.x + PIPE_WIDTH) {
+                    if (bird.y - bird.radius + 4 < p.top || bird.y + bird.radius - 4 > p.top + GAP_HEIGHT) triggerGameOver();
+                }
+                if (!p.passed && bird.x > p.x + PIPE_WIDTH) {
+                    score++; p.passed = true;
+                    scoreDisplay.innerText = score;
+                }
+                if (p.x + PIPE_WIDTH < 0) pipes.splice(i, 1);
+            }
+            frameCount++;
+        }
+
+        function drawBird() {
+            const theme = COLORS[colorIdx];
+            const acc = ACCESSORIES[accessoryIdx];
+            
+            ctx.save();
+            ctx.translate(bird.x, bird.y);
+            let rotation = isGameStarted ? Math.min(Math.PI / 4, Math.max(-Math.PI / 4, bird.velocity * 0.12)) : 0;
+            ctx.rotate(rotation);
+            
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = theme.main;
+            
+            // 1. Tuft
+            ctx.fillStyle = theme.main;
+            ctx.beginPath();
+            ctx.arc(-2, -bird.radius + 2, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. Body
+            ctx.beginPath();
+            ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 3. Beak
+            ctx.fillStyle = '#f97316';
+            ctx.beginPath();
+            ctx.moveTo(bird.radius - 2, -2);
+            ctx.lineTo(bird.radius + 8, 2);
+            ctx.lineTo(bird.radius - 2, 6);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 4. Wing
+            ctx.fillStyle = theme.wing;
+            ctx.beginPath();
+            let wingY = 2 + (isGameStarted ? Math.sin(frameCount * 0.2) * 2 : 0);
+            ctx.ellipse(-6, wingY, 10, 7, rotation * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 5. Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(6, -4, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(8, -4, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 6. Accessories
+            ctx.shadowBlur = 0;
+            if (acc === "Top Hat") {
+                ctx.fillStyle = "#334155";
+                ctx.fillRect(-12, -bird.radius - 4, 24, 4); // Brim
+                ctx.fillRect(-8, -bird.radius - 18, 16, 14); // Hat body
+                ctx.fillStyle = "#ef4444";
+                ctx.fillRect(-8, -bird.radius - 8, 16, 2); // Ribbon
+            } else if (acc === "Bow") {
+                ctx.fillStyle = "#fb7185";
+                ctx.beginPath();
+                ctx.moveTo(-10, -bird.radius);
+                ctx.lineTo(-18, -bird.radius - 6);
+                ctx.lineTo(-18, -bird.radius + 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-10, -bird.radius);
+                ctx.lineTo(-2, -bird.radius - 6);
+                ctx.lineTo(-2, -bird.radius + 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(-10, -bird.radius, 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (acc === "Glasses") {
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(2, -8, 8, 8);
+                ctx.strokeRect(10, -8, 8, 8);
+                ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(2, -4); ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            pipes.forEach(p => {
+                ctx.fillStyle = '#0ea5e9';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#0ea5e9';
+                roundRect(ctx, p.x, 0, PIPE_WIDTH, p.top, 4);
+                roundRect(ctx, p.x, p.top + GAP_HEIGHT, PIPE_WIDTH, canvas.height - (p.top + GAP_HEIGHT), 4);
+                ctx.shadowBlur = 0;
+            });
+            drawBird();
+        }
+
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath(); ctx.fill();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!isGameOver) animationId = requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); jump(); } });
+        canvas.addEventListener('mousedown', (e) => { e.preventDefault(); jump(); });
+        canvas.addEventListener('touchstart', (e) => { 
+            if (e.target.tagName !== 'BUTTON') { e.preventDefault(); jump(); }
+        }, { passive: false });
+
+        document.getElementById('start-btn').onclick = startGame;
+        document.getElementById('restart-btn').onclick = startGame;
+        
+        // Initial setup
+        window.changeColor = changeColor;
+        window.changeAccessory = changeAccessory;
+        draw();
+    </script>
+</body>
+</html>
