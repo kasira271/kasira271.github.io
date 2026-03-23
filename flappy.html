@@ -61,37 +61,41 @@
             width: 100%;
             pointer-events: none;
         }
-        .voice-indicator {
+        .controls-indicator {
             position: absolute;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .control-badge {
             background: rgba(15, 23, 42, 0.8);
             padding: 8px 16px;
             border-radius: 20px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             border: 1px solid #38bdf8;
             display: flex;
             align-items: center;
             gap: 8px;
-            pointer-events: auto;
             cursor: pointer;
-            min-width: 220px;
-            justify-content: center;
+            white-space: nowrap;
         }
         .vol-meter {
-            width: 40px;
+            width: 50px;
             height: 6px;
             background: #334155;
             border-radius: 3px;
             overflow: hidden;
-            margin-left: 5px;
+            position: relative;
         }
         #vol-level {
             height: 100%;
             width: 0%;
             background: #22c55e;
-            transition: width 0.1s;
+            transition: width 0.05s;
         }
         .pulse {
             width: 8px;
@@ -128,27 +132,35 @@
             <div class="mb-4">
                 <img src="Screenshot_2026-03-23_141147-removebg-preview.png" alt="Chick" class="w-24 h-24 animate-bounce">
             </div>
-            <p class="text-slate-400 text-sm mb-2">Press Space or Tap to Jump</p>
-            <p class="text-sky-400 text-xs font-bold uppercase tracking-widest">Or Make a Loud Sound</p>
+            <p class="text-slate-400 text-sm mb-1">Space / Tap / Shake / Voice</p>
+            <p class="text-sky-400 text-[10px] font-bold uppercase tracking-widest">Flick phone up/down to move</p>
             
             <div class="training-box">
-                <p class="text-[10px] text-slate-500 uppercase mb-2">Voice Guide</p>
-                <button onclick="playVoiceExample()" class="flex items-center gap-2 text-xs text-white bg-slate-700 px-3 py-1.5 rounded-full hover:bg-slate-600 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
-                    Listen to "Up" Example
-                </button>
-                <p class="text-[9px] text-slate-500 mt-2 italic">A short sharp sound works best!</p>
+                <p class="text-[10px] text-slate-500 uppercase mb-2">Reference Audio</p>
+                <div class="flex gap-2">
+                    <button onclick="playExample('up')" class="flex items-center gap-2 text-[10px] text-white bg-slate-700 px-3 py-1.5 rounded-full hover:bg-slate-600">
+                        Up Example
+                    </button>
+                    <button onclick="playExample('down')" class="flex items-center gap-2 text-[10px] text-white bg-slate-700 px-3 py-1.5 rounded-full hover:bg-slate-600">
+                        Down Example
+                    </button>
+                </div>
             </div>
 
             <button class="btn" id="start-btn">START GAME</button>
         </div>
 
-        <!-- VOICE TOGGLE -->
-        <div id="voice-toggle" class="voice-indicator" onclick="initAudioControl()">
-            <div id="voice-pulse" class="hidden pulse"></div>
-            <span id="voice-status">Enable Mic Control</span>
-            <div id="vol-container" class="vol-meter hidden">
-                <div id="vol-level"></div>
+        <!-- CONTROL TOGGLES -->
+        <div class="controls-indicator">
+            <div id="motion-toggle" class="control-badge" onclick="initMotionControl()">
+                <span id="motion-status">Enable Motion (Shake)</span>
+            </div>
+            <div id="voice-toggle" class="control-badge" onclick="initAudioControl()">
+                <div id="voice-pulse" class="hidden pulse"></div>
+                <span id="voice-status">Enable Voice Control</span>
+                <div id="vol-container" class="vol-meter hidden">
+                    <div id="vol-level"></div>
+                </div>
             </div>
         </div>
 
@@ -171,36 +183,37 @@
         const finalScoreTxt = document.getElementById('final-score');
         const highScoreTxt = document.getElementById('high-score');
         const voiceStatus = document.getElementById('voice-status');
+        const motionStatus = document.getElementById('motion-status');
         const voicePulse = document.getElementById('voice-pulse');
         const volLevel = document.getElementById('vol-level');
         const volContainer = document.getElementById('vol-container');
         
-        // Character Image Setup
+        // Assets
         let chickLoaded = false;
         const chickImg = new Image();
-        chickImg.onload = () => {
-            chickLoaded = true;
-            draw();
-        };
+        chickImg.onload = () => { chickLoaded = true; draw(); };
         chickImg.src = 'Screenshot_2026-03-23_141147-removebg-preview.png';
 
-        // Audio SFX Setup
         const sfxJump = new Audio('squawk.mp3');
         const sfxScore = new Audio('combo.mp3');
         const sfxHit = new Audio('punch.mp3');
-        const sfxExample = new Audio('voice_115381.aac');
+        const sfxUp = new Audio('voice_115381.aac');
+        const sfxDown = new Audio('_22134787.m4a');
 
         function playSound(audio) {
             audio.currentTime = 0;
             audio.play().catch(e => {});
         }
 
-        function playVoiceExample() {
-            playSound(sfxExample);
+        function playExample(type) {
+            if (type === 'up') playSound(sfxUp);
+            else playSound(sfxDown);
         }
 
+        // Config
         const GRAVITY = 0.22;
         const JUMP_STRENGTH = -4.5;
+        const DIVE_STRENGTH = 6.0;
         const PIPE_SPEED = 1.8;
         const PIPE_SPAWN_RATE = 110;
         const PIPE_WIDTH = 45;
@@ -216,72 +229,104 @@
         let isGameStarted = false;
         let animationId;
         
-        // --- REAL-TIME AUDIO ENGINE ---
-        let audioContext;
-        let analyzer;
-        let microphone;
-        let dataArray;
+        // Audio Logic
+        let audioContext, analyzer, dataArray;
         let isAudioInit = false;
-        let lastJumpTime = 0;
-        const JUMP_COOLDOWN = 150; // ms between jumps
-        const VOLUME_THRESHOLD = 45; // Adjust based on background noise
+        let lastActionTime = 0;
+        const COOLDOWN = 200; 
+        const VOLUME_THRESHOLD = 45; 
+
+        // Motion Logic
+        let isMotionInit = false;
+        const SHAKE_THRESHOLD = 15; // sensitivity for jump/dive
 
         async function initAudioControl() {
-            if (isAudioInit) return; // Prevent multiple initializations
-
+            if (isAudioInit) return;
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyzer = audioContext.createAnalyser();
-                microphone = audioContext.createMediaStreamSource(stream);
-                
-                analyzer.fftSize = 256;
-                const bufferLength = analyzer.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
-                
-                microphone.connect(analyzer);
-                
+                const source = audioContext.createMediaStreamSource(stream);
+                analyzer.fftSize = 512;
+                dataArray = new Uint8Array(analyzer.frequencyBinCount);
+                source.connect(analyzer);
                 isAudioInit = true;
-                voiceStatus.innerText = "Mic Active (Shout to Jump)";
+                voiceStatus.innerText = "Voice Active";
                 voicePulse.classList.remove('hidden');
                 volContainer.classList.remove('hidden');
-                
                 analyzeAudio();
-            } catch (err) {
-                console.error("Mic access denied or error:", err);
-                voiceStatus.innerText = "Mic Denied (Tap to Play)";
-            }
+            } catch (err) { voiceStatus.innerText = "Mic Error"; }
         }
 
         function analyzeAudio() {
             if (!isAudioInit) return;
-            
             analyzer.getByteFrequencyData(dataArray);
-            
-            // Calculate average volume (RMS-ish)
-            let sum = 0;
+            let sum = 0, weightedSum = 0;
             for (let i = 0; i < dataArray.length; i++) {
                 sum += dataArray[i];
+                weightedSum += dataArray[i] * i;
             }
-            let average = sum / dataArray.length;
-            
-            // Update Visual Meter
-            let visualLevel = Math.min(100, (average / 100) * 100);
-            volLevel.style.width = visualLevel + "%";
-            volLevel.style.background = average > VOLUME_THRESHOLD ? "#f43f5e" : "#22c55e";
-
-            // Trigger Jump if loud enough and not in cooldown
-            if (average > VOLUME_THRESHOLD) {
+            let averageVolume = sum / dataArray.length;
+            let pitchIndex = sum > 0 ? weightedSum / sum : 0;
+            volLevel.style.width = Math.min(100, averageVolume) + "%";
+            if (averageVolume > VOLUME_THRESHOLD) {
                 const now = Date.now();
-                if (now - lastJumpTime > JUMP_COOLDOWN) {
-                    jump();
-                    lastJumpTime = now;
+                if (now - lastActionTime > COOLDOWN) {
+                    if (pitchIndex > 22) jump();
+                    else if (pitchIndex < 18) dive();
+                    lastActionTime = now;
                 }
             }
-
             requestAnimationFrame(analyzeAudio);
         }
-        // ------------------------------
+
+        async function initMotionControl() {
+            if (isMotionInit) return;
+            
+            // Check for iOS permission requirement
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceMotionEvent.requestPermission();
+                    if (permission === 'granted') {
+                        setupMotionListener();
+                    } else {
+                        motionStatus.innerText = "Motion Denied";
+                    }
+                } catch (err) {
+                    motionStatus.innerText = "Motion Error";
+                }
+            } else {
+                // Non-iOS or older devices
+                setupMotionListener();
+            }
+        }
+
+        function setupMotionListener() {
+            window.addEventListener('devicemotion', (event) => {
+                const acc = event.accelerationIncludingGravity;
+                if (!acc) return;
+
+                // We look at Z or Y depending on orientation, but Y is usually "up/down" relative to screen
+                // Use absolute change to detect "flick"
+                const y = acc.y || 0;
+                
+                const now = Date.now();
+                if (now - lastActionTime > COOLDOWN) {
+                    // Sudden negative Y (moving phone up fast)
+                    if (y < -SHAKE_THRESHOLD) {
+                        jump();
+                        lastActionTime = now;
+                    } 
+                    // Sudden positive Y (moving phone down fast)
+                    else if (y > SHAKE_THRESHOLD) {
+                        dive();
+                        lastActionTime = now;
+                    }
+                }
+            });
+            isMotionInit = true;
+            motionStatus.innerText = "Motion Active (Flick Phone)";
+        }
 
         function resizeCanvas() {
             canvas.width = Math.min(window.innerWidth, 450);
@@ -294,26 +339,27 @@
         resizeCanvas();
 
         function createPipe() {
-            const minHeight = 60;
-            const range = canvas.height - GAP_HEIGHT - (minHeight * 2);
-            pipes.push({ x: canvas.width, top: minHeight + Math.random() * range, passed: false });
+            const minH = 60;
+            const range = canvas.height - GAP_HEIGHT - (minH * 2);
+            pipes.push({ x: canvas.width, top: minH + Math.random() * range, passed: false });
         }
 
         function jump() {
-            if (!isGameStarted) {
-                startGame();
-            } else if (!isGameOver) {
+            if (!isGameStarted) startGame();
+            else if (!isGameOver) {
                 bird.velocity = JUMP_STRENGTH;
                 playSound(sfxJump);
             }
         }
 
-        function startGame() {
-            // Safety check for AudioContext (browsers block it until user interaction)
-            if (audioContext && audioContext.state === 'suspended') {
-                audioContext.resume();
+        function dive() {
+            if (isGameStarted && !isGameOver) {
+                bird.velocity = DIVE_STRENGTH;
             }
-            
+        }
+
+        function startGame() {
+            if (audioContext && audioContext.state === 'suspended') audioContext.resume();
             isGameStarted = true;
             isGameOver = false;
             score = 0;
@@ -332,7 +378,6 @@
             if (isGameOver) return;
             isGameOver = true;
             playSound(sfxHit);
-            
             if (score > highscore) {
                 highscore = score;
                 localStorage.setItem('neon-flap-best', highscore);
@@ -346,31 +391,20 @@
             if (isGameOver) return;
             bird.velocity += GRAVITY;
             bird.y += bird.velocity;
-            
             if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) triggerGameOver();
-            
             if (frameCount % PIPE_SPAWN_RATE === 0) createPipe();
-            
             for (let i = pipes.length - 1; i >= 0; i--) {
                 let p = pipes[i];
                 p.x -= PIPE_SPEED;
-                
-                const birdHitboxWidth = bird.radius * 1.3;
-                const birdHitboxHeight = bird.radius * 1.3;
-
-                if (bird.x + birdHitboxWidth/2 > p.x && bird.x - birdHitboxWidth/2 < p.x + PIPE_WIDTH) {
-                    if (bird.y - birdHitboxHeight/2 < p.top || bird.y + birdHitboxHeight/2 > p.top + GAP_HEIGHT) {
-                        triggerGameOver();
-                    }
+                const hbW = bird.radius * 1.3, hbH = bird.radius * 1.3;
+                if (bird.x + hbW/2 > p.x && bird.x - hbW/2 < p.x + PIPE_WIDTH) {
+                    if (bird.y - hbH/2 < p.top || bird.y + hbH/2 > p.top + GAP_HEIGHT) triggerGameOver();
                 }
-                
                 if (!p.passed && bird.x > p.x + PIPE_WIDTH) {
-                    score++;
-                    p.passed = true;
+                    score++; p.passed = true;
                     scoreDisplay.innerText = score;
                     playSound(sfxScore);
                 }
-                
                 if (p.x + PIPE_WIDTH < 0) pipes.splice(i, 1);
             }
             frameCount++;
@@ -378,22 +412,17 @@
 
         function drawBird() {
             if (!chickLoaded) return;
-            
             ctx.save();
             ctx.translate(bird.x, bird.y);
-            
-            let rotation = isGameStarted ? Math.min(Math.PI / 8, Math.max(-Math.PI / 8, bird.velocity * 0.08)) : 0;
-            ctx.rotate(rotation);
-            
-            const drawSize = bird.radius * 3.5;
-            ctx.drawImage(chickImg, -drawSize/2, -drawSize/2, drawSize, drawSize);
-            
+            let rot = isGameStarted ? Math.min(Math.PI/8, Math.max(-Math.PI/8, bird.velocity * 0.08)) : 0;
+            ctx.rotate(rot);
+            const size = bird.radius * 3.5;
+            ctx.drawImage(chickImg, -size/2, -size/2, size, size);
             ctx.restore();
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             pipes.forEach(p => {
                 ctx.fillStyle = '#38bdf8';
                 ctx.shadowBlur = 15;
@@ -402,7 +431,6 @@
                 roundRect(ctx, p.x, p.top + GAP_HEIGHT, PIPE_WIDTH, canvas.height - (p.top + GAP_HEIGHT), 6);
                 ctx.shadowBlur = 0;
             });
-            
             drawBird();
         }
 
@@ -422,29 +450,27 @@
         }
 
         function gameLoop() {
-            update();
-            draw();
+            update(); draw();
             if (!isGameOver) animationId = requestAnimationFrame(gameLoop);
         }
 
-        // Standard listeners
         window.addEventListener('keydown', (e) => { 
             if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jump(); }
+            if (e.code === 'ArrowDown') { e.preventDefault(); dive(); }
         });
         canvas.addEventListener('mousedown', (e) => { e.preventDefault(); jump(); });
         canvas.addEventListener('touchstart', (e) => { 
-            if (e.target.tagName !== 'BUTTON' && e.target.id !== 'voice-toggle') { 
-                e.preventDefault(); 
-                jump(); 
+            if (e.target.tagName !== 'BUTTON' && !e.target.closest('.control-badge')) { 
+                e.preventDefault(); jump(); 
             }
         }, { passive: false });
 
         document.getElementById('start-btn').onclick = startGame;
         document.getElementById('restart-btn').onclick = startGame;
         
-        window.playVoiceExample = playVoiceExample;
+        window.playExample = playExample;
         window.initAudioControl = initAudioControl;
-
+        window.initMotionControl = initMotionControl;
         draw();
     </script>
 </body>
